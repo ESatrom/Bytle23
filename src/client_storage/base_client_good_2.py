@@ -5,26 +5,16 @@ from game.common.game_board import GameBoard
 from game.common.action import Action
 from game.common.cook import Cook
 from typing import Tuple
-from typing import List
-from enum import Enum
 from game.common.enums import *
 
 # Different states for state machine
 class State:
     WAITING_FOR_DOUGH = 0
-    CARRYING_DOUGH = 1
-    WAITING_FOR_INGREDIENT = 2
+    HAS_DOUGH = 1
+    HAS_ROLLED = 2
 
 # Main client class
 class Client(UserClient):
-    def holding_cooked_pizza(self, cook):
-        return cook.held_item!=None and isinstance(cook.held_item, Pizza) and cook.held_item.state==PizzaState.baked
-    def holding_air(self, cook):
-        return cook.held_item==None or (isinstance(cook.held_item, Topping) and cook.held_item.topping_type==ToppingType.none)
-    def holding_topped_pizza(self, cook):
-        return cook.held_item!=None and isinstance(cook.held_item, Pizza) and cook.held_item.state==PizzaState.sauced and len(cook.held_item.__topping)>0
-    def held_pizza_toppings(self, cook):
-        return cook.held_item.__topping if self.holding_topped_pizza(cook) else []
     def __init__(self):
         """
         Variables and info you want to save between turns go here
@@ -56,11 +46,34 @@ class Client(UserClient):
         self.check_side(cook)
 
     def interact_at(self, cook: Cook, targ_pos: Tuple[int, int]) -> ActionType:
+        if targ_pos==None:
+            return ActionType.none
         man_dist = self.manhattan_distance(cook.position, targ_pos)
         if man_dist > 1:
             return self.move_action(cook.position, targ_pos)
         else:
             return ActionType.interact
+
+    def holding_cooked_pizza(self, cook):
+        return True
+    def holding_topped_pizza(self, cook):
+        return True
+    def holding_cooked_pizza(self, cook):
+        return True
+    def holding_topping(self, cook, type, cut):
+        return True
+    def holding_sauced_pizza(self, cook):
+        return True
+    def holding_rolled_pizza(self, cook):
+        return True
+    def get_donest_pizza(self, world, cook):
+        return (0,0)
+    def get_combined_pizza(self, world):
+        return (0,0)
+    def get_combining_pizza(self, world):
+        return (0,0)
+    def get_dispenser(self, world, cook, ingredient):
+        return (0,0)
 
     def take_turn(self, turn: int, action: Action, world: GameBoard, cook: Cook):
         """
@@ -70,19 +83,45 @@ class Client(UserClient):
         :param actions:     This is the actions object that you will add effort allocations or decrees to.
         :param world:       Generic world information
         """
-        action.chosen_action=ActionType.Move.none
-        # # Run the start function on turn 1
-        # if turn == 1:
-        #     self.start(action, world, cook)
-        # # Check state machine
-        # if self.holding_air(cook):
-        #     action.chosen_action = self.interact_at(cook, self.most_expensive_dispenser())
-        # else:
-        #     action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.bin))
+        # Run the start function on turn 1
+        if turn == 1:
+            self.start(action, world, cook)
+        # Check state machine
+        if self.holding_cooked_pizza(cook):
+            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.delivery))
 
-    def most_expensive_dispenser(self, world: GameBoard):
-        return sorted(self.scan_all(world, ObjectType.dispenser), key=lambda dispenser: world.game_map[dispenser[0]][dispenser[1]].occupied_by.item.worth)[-1]
+        elif self.get_donest_pizza()!=None and self.holding_air():
+            action.chosen_action = self.interact_at(cook, self.get_donest_pizza())
 
+        elif self.holding_topped_pizza():
+            action.chosen_action = self.interact_at(cook, self.closest_open_oven())
+
+        elif self.get_combined_pizza()!=None:
+            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.combiner))
+
+        elif self.holding_topping(ToppingType.cheese, True):
+            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.combiner))
+
+        elif self.holding_topping(ToppingType.cheese, False):
+            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.cutter))
+
+        elif self.get_combining_pizza()!=None and self.get_dispenser(world, cook, ToppingType.cheese):
+            action.chosen_action = self.interact_at(cook, self.get_dispenser(world, cook, ToppingType.cheese))
+
+        elif self.holding_sauced_pizza():
+            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.combiner))
+
+        elif self.holding_rolled_pizza():
+            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.sauce))
+
+        elif self.holding_topping(ToppingType.dough, False):
+            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.roller))
+
+        elif self.get_dispenser(world, cook, ToppingType.dough)!=None:
+            action.chosen_action = self.interact_at(cook, self.get_dispenser(world, cook, ToppingType.dough))
+
+        else:
+            action.chosen_action = self.move_action(cook.position, self.scan_board(world, ObjectType.delivery))
 
     def check_side(self, cook):
         """
@@ -137,32 +176,6 @@ class Client(UserClient):
                         return (y, x)
         # Didn't find anything that matched our criteria
         return None
-
-    def scan_all(self, world: GameBoard, station_type: ObjectType, eval_func=None) -> List[Tuple[int, int]]:
-        """
-        Scans every tile on your clients half of the gameboard for a station that matches station_type and the eval_func
-
-        :param world:               GameBoard to search
-        :param station_type:        ObjectType to filter stations by
-        :param eval_func:           Lambda function to filter by, will be ignored if None
-        :returns Tuple[int, int]:   Will return the y,x position of what you were searching for
-        """
-        hits=[]
-        # For each tile on your side
-        for y in range(self.y_min-1, self.y_max+2):
-            for x in range(self.x_min-1, self.x_max+2):
-                # Filter out things not of object type
-                station = world.game_map[y][x].occupied_by
-                if station != None and station.object_type == station_type:
-                    item = station.item
-                    # If not eval function, return the station
-                    if eval_func == None:
-                        hits+=[(y, x)]
-                    # Check eval function on item
-                    elif eval_func(station):
-                        hits+=[(y, x)]
-        # Didn't find anything that matched our criteria
-        return hits
 
     def manhattan_distance(self, int_tuple_one: Tuple[int, int], int_tuple_two: Tuple[int, int]) -> int:
         """

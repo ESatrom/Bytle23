@@ -3,8 +3,8 @@ from game.client.user_client import UserClient
 from game.common.cook import Cook
 from game.common.game_board import GameBoard
 from game.common.action import Action
-from game.common.cook import Cook
 from typing import Tuple
+from typing import List
 from game.common.enums import *
 
 # Different states for state machine
@@ -34,7 +34,7 @@ class Client(UserClient):
 
         :returns:       Your team name
         """
-        return 'Base client 1'
+        return 'Papa Rivard\'s Pizza Professional™'
 
     def start(self, action: Action, world: GameBoard, cook: Cook):
         """
@@ -44,6 +44,48 @@ class Client(UserClient):
         :param world:       Generic world information
         """
         self.check_side(cook)
+
+    def interact_at(self, cook: Cook, targ_pos: Tuple[int, int]) -> ActionType:
+        if targ_pos==None:
+            return ActionType.none
+        man_dist = self.manhattan_distance(cook.position, targ_pos)
+        if man_dist > 1:
+            return self.move_action(cook.position, targ_pos)
+        else:
+            return ActionType.interact
+
+    def holding_air(self, cook):
+        return cook.held_item==None or (cook.held_item.object_type==ObjectType.topping and cook.held_item.topping_type==ToppingType.none)
+
+    def cheesiest_dispenser(self, world: GameBoard):
+        things=self.scan_all(world, ObjectType.dispenser)
+        return sorted(things, key=lambda dispenser: (world.game_map[dispenser[0]][dispenser[1]].occupied_by.item.worth if world.game_map[dispenser[0]][dispenser[1]].occupied_by.item.worth < 60 else 0) if world.game_map[dispenser[0]][dispenser[1]].occupied_by.item!=None else 0)[-1]
+
+    def scan_all(self, world: GameBoard, station_type: ObjectType, eval_func=None) -> List[Tuple[int, int]]:
+        """
+        Scans every tile on your clients half of the gameboard for a station that matches station_type and the eval_func
+
+        :param world:               GameBoard to search
+        :param station_type:        ObjectType to filter stations by
+        :param eval_func:           Lambda function to filter by, will be ignored if None
+        :returns Tuple[int, int]:   Will return the y,x position of what you were searching for
+        """
+        hits=[]
+        # For each tile on your side
+        for y in range(self.y_min-1, self.y_max+2):
+            for x in range(self.x_min-1, self.x_max+2):
+                # Filter out things not of object type
+                station = world.game_map[y][x].occupied_by
+                if station != None and station.object_type == station_type:
+                    item = station.item
+                    # If not eval function, return the station
+                    if eval_func == None:
+                        hits+=[(y, x)]
+                    # Check eval function on item
+                    elif eval_func(station):
+                        hits+=[(y, x)]
+        # Didn't find anything that matched our criteria
+        return hits
 
     def take_turn(self, turn: int, action: Action, world: GameBoard, cook: Cook):
         """
@@ -57,39 +99,10 @@ class Client(UserClient):
         if turn == 1:
             self.start(action, world, cook)
         # Check state machine
-        if self.state == State.WAITING_FOR_DOUGH:
-            # Filter by dispensers with a dough object
-            dough_position = self.scan_board(world, ObjectType.dispenser, lambda x: x.item != None and x.item.topping_type == ToppingType.dough)
-            # Move to dough
-            if dough_position != None:
-                man_dist = self.manhattan_distance(cook.position, dough_position)
-                if man_dist > 1:
-                    action.chosen_action = self.move_action(cook.position, dough_position)
-                else:
-                    action.chosen_action = ActionType.interact
-                    self.state = State.HAS_DOUGH
-        elif self.state == State.HAS_DOUGH:
-            # Find a roller station
-            roller_position = self.scan_board(world, ObjectType.roller)
-            # Move to roller
-            if roller_position != None:
-                man_dist = self.manhattan_distance(cook.position, roller_position)
-                if man_dist > 1:
-                    action.chosen_action = self.move_action(cook.position, roller_position)
-                else:
-                    action.chosen_action = ActionType.interact
-                    self.state = State.HAS_ROLLED
-        elif self.state == State.HAS_ROLLED:
-            # Find a garbage bin
-            bin_position = self.scan_board(world, ObjectType.bin)
-            # Move to bin
-            if bin_position != None:
-                man_dist = self.manhattan_distance(cook.position, bin_position)
-                if man_dist > 1:
-                    action.chosen_action = self.move_action(cook.position, bin_position)
-                else:
-                    action.chosen_action = ActionType.interact
-                    self.state = State.WAITING_FOR_DOUGH
+        if self.holding_air(cook):
+            action.chosen_action = self.interact_at(cook, self.cheesiest_dispenser(world))
+        else:
+            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.bin))
 
     def check_side(self, cook):
         """

@@ -44,7 +44,7 @@ class Client(UserClient):
 
         :returns:       Your team name
         """
-        return 'Papa Rivard\'s Pizza Professional'
+        return 'Papa Rivard\'s Pizza Professional™'
 
     def start(self, action: Action, world: GameBoard, cook: Cook):
         """
@@ -74,65 +74,13 @@ class Client(UserClient):
         if turn == 1:
             self.start(action, world, cook)
         # Check state machine
-        if self.holding_cooked_pizza(cook):
-            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.delivery))
-        elif self.get_donest_pizza()!=None and self.holding_air():
-            action.chosen_action = self.interact_at(cook, self.get_donest_pizza())
-        elif self.holding_topped_pizza():
-            action.chosen_action = self.interact_at(cook, self.closest_open_oven())
-        elif self.get_combined_pizza()!=None:
-            pass#TODO
-        elif self.holding_topping(ToppingType.cheese, True):
-            pass#TODO
-        elif self.holding_topping(ToppingType.cheese, False):
-            pass#TODO
-        elif self.get_combining_pizza()!=None and self.get_dispenser(world, cook, ToppingType.cheese):
-            pass#TODO
-        elif self.get
+        if self.holding_air(cook):
+            action.chosen_action = self.interact_at(cook, self.most_expensive_dispenser())
+        else:
+            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.bin))
 
-
-
-
-        if self.state == State.WAITING_FOR_DOUGH:
-            # Filter by dispensers with a dough object
-            dough_position = self.scan_board(world, ObjectType.dispenser, lambda x: x.item != None and x.item.topping_type == ToppingType.dough)
-            # Move to dough
-            if dough_position != None:
-                man_dist = self.manhattan_distance(cook.position, dough_position)
-                if man_dist > 1:
-                    action.chosen_action = self.move_action(cook.position, dough_position)
-                else:
-                    action.chosen_action = ActionType.interact
-                    self.state = State.HAS_DOUGH
-        elif self.state == State.HAS_DOUGH:
-            # Find a roller station
-            roller_position = self.scan_board(world, ObjectType.roller)
-            # Move to roller
-            if roller_position != None:
-                man_dist = self.manhattan_distance(cook.position, roller_position)
-                if man_dist > 1:
-                    action.chosen_action = self.move_action(cook.position, roller_position)
-                else:
-                    action.chosen_action = ActionType.interact
-                    self.state = State.HAS_ROLLED
-        elif self.state == State.HAS_ROLLED:
-            # Find a garbage bin
-            bin_position = self.scan_board(world, ObjectType.bin)
-            # Move to bin
-            if bin_position != None:
-                man_dist = self.manhattan_distance(cook.position, bin_position)
-                if man_dist > 1:
-                    action.chosen_action = self.move_action(cook.position, bin_position)
-                else:
-                    action.chosen_action = ActionType.interact
-                    self.state = State.WAITING_FOR_DOUGH
-
-    def get_donest_pizza(self, cook, world) -> Tuple[int, int]:
-        ovens = self.scan_all(world, ObjectType.oven, lambda oven: oven.is_active)
-        ovens = list(zip(map(ovens, lambda oven: world.game_map[oven[0]][oven[1]].occupied_by.timer-self.manhattan_distance(cook.position, oven)), ovens))
-        ovens = sorted(filter(lambda oven: oven[0]>0 and oven[0]<=20, ovens), key=lambda oven: oven[0])
-        if len(ovens)==0:return None
-        return ovens[0][1]
+    def most_expensive_dispenser(self, world: GameBoard):
+        return sorted(self.scan_all(world, ObjectType.dispenser), key=lambda dispenser: world.game_map[dispenser[0]][dispenser[1]].occupied_by.item.worth)[-1]
 
 
     def check_side(self, cook):

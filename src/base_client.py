@@ -7,12 +7,6 @@ from game.common.cook import Cook
 from typing import Tuple
 from game.common.enums import *
 
-# Different states for state machine
-class State:
-    WAITING_FOR_DOUGH = 0
-    HAS_DOUGH = 1
-    HAS_ROLLED = 2
-
 # Main client class
 class Client(UserClient):
     def __init__(self):
@@ -20,7 +14,6 @@ class Client(UserClient):
         Variables and info you want to save between turns go here
         """
         super().__init__()
-        self.state = State.WAITING_FOR_DOUGH
         # What side and x and y bounds are we using (set in start)
         self.is_left_side = None
         self.x_min = None
@@ -45,6 +38,38 @@ class Client(UserClient):
         """
         self.check_side(cook)
 
+    def interact_at(self, cook: Cook, targ_pos: Tuple[int, int]) -> ActionType:
+        if targ_pos==None:
+            return ActionType.none
+        man_dist = self.manhattan_distance(cook.position, targ_pos)
+        if man_dist > 1:
+            return self.move_action(cook.position, targ_pos)
+        else:
+            return ActionType.interact
+
+    def holding_cooked_pizza(self, cook):
+        return True
+    def holding_topped_pizza(self, cook):
+        return True
+    def holding_cooked_pizza(self, cook):
+        return True
+    def holding_topping(self, cook, type, cut):
+        return True
+    def holding_sauced_pizza(self, cook):
+        return True
+    def holding_rolled_pizza(self, cook):
+        return True
+    def get_donest_pizza(self, world, cook):
+        return (0,0)
+    def closest_available_oven(self, world, cook):
+        return (0,0)
+    def get_combined_pizza(self, world):
+        return (0,0)
+    def get_combining_pizza(self, world):
+        return (0,0)
+    def get_dispenser(self, world, cook, ingredient):
+        return (0,0)
+
     def take_turn(self, turn: int, action: Action, world: GameBoard, cook: Cook):
         """
         This is where your bot will decide what to do.
@@ -57,39 +82,30 @@ class Client(UserClient):
         if turn == 1:
             self.start(action, world, cook)
         # Check state machine
-        if self.state == State.WAITING_FOR_DOUGH:
-            # Filter by dispensers with a dough object
-            dough_position = self.scan_board(world, ObjectType.dispenser, lambda x: x.item != None and x.item.topping_type == ToppingType.dough)
-            # Move to dough
-            if dough_position != None:
-                man_dist = self.manhattan_distance(cook.position, dough_position)
-                if man_dist > 1:
-                    action.chosen_action = self.move_action(cook.position, dough_position)
-                else:
-                    action.chosen_action = ActionType.interact
-                    self.state = State.HAS_DOUGH
-        elif self.state == State.HAS_DOUGH:
-            # Find a roller station
-            roller_position = self.scan_board(world, ObjectType.roller)
-            # Move to roller
-            if roller_position != None:
-                man_dist = self.manhattan_distance(cook.position, roller_position)
-                if man_dist > 1:
-                    action.chosen_action = self.move_action(cook.position, roller_position)
-                else:
-                    action.chosen_action = ActionType.interact
-                    self.state = State.HAS_ROLLED
-        elif self.state == State.HAS_ROLLED:
-            # Find a garbage bin
-            bin_position = self.scan_board(world, ObjectType.bin)
-            # Move to bin
-            if bin_position != None:
-                man_dist = self.manhattan_distance(cook.position, bin_position)
-                if man_dist > 1:
-                    action.chosen_action = self.move_action(cook.position, bin_position)
-                else:
-                    action.chosen_action = ActionType.interact
-                    self.state = State.WAITING_FOR_DOUGH
+        if self.holding_cooked_pizza(cook):
+            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.delivery))
+        elif self.get_donest_pizza(world, cook)!=None and self.holding_air():
+            action.chosen_action = self.interact_at(cook, self.get_donest_pizza(world, cook))
+        elif self.holding_topped_pizza(cook):
+            action.chosen_action = self.interact_at(cook, self.closest_available_oven(world, cook))
+        elif self.get_combined_pizza(world)!=None:
+            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.combiner))
+        elif self.holding_topping(cook, ToppingType.cheese, True):
+            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.combiner))
+        elif self.holding_topping(cook, ToppingType.cheese, False):
+            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.cutter))
+        elif self.get_combining_pizza(world)!=None and self.get_dispenser(world, cook, ToppingType.cheese):
+            action.chosen_action = self.interact_at(cook, self.get_dispenser(world, cook, ToppingType.cheese))
+        elif self.holding_sauced_pizza(cook):
+            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.combiner))
+        elif self.holding_rolled_pizza(cook):
+            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.sauce))
+        elif self.holding_topping(cook, ToppingType.dough, False):
+            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.roller))
+        elif self.get_dispenser(world, cook, ToppingType.dough)!=None:
+            action.chosen_action = self.interact_at(cook, self.get_dispenser(world, cook, ToppingType.dough))
+        else:
+            action.chosen_action = self.move_action(cook.position, self.scan_board(world, ObjectType.delivery))
 
     def check_side(self, cook):
         """
