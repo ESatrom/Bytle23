@@ -1,5 +1,5 @@
 tqdm
-pygame --pre
+pygame
 pillow
 opencv-python
 requests

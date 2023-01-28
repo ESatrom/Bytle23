@@ -28,13 +28,13 @@ class Client(UserClient):
         self.x_max = None
         self.y_max = 5
 
-    def team_name(self):
+    def team_data(self):
         """
         Return your team name for the engine
 
         :returns:       Your team name
         """
-        return 'Papa Rivard\'s Pizza Professional™'
+        return ('Pizza Professional™ on Speed', "jean")
 
     def start(self, action: Action, world: GameBoard, cook: Cook):
         """
