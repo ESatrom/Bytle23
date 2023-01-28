@@ -168,16 +168,16 @@ class Client(UserClient):
         direction_to_move = self.decide_move(dist_tup)
         return direction_to_move
 
-    class node:
-        def __init__(self, dataval=None):
-            self.dataval = dataval
-            self.nextval[] = [None]
+    # class node:
+    #     def __init__(self, dataval=None):
+    #         self.dataval = dataval
+    #         self.nextval[] = [None]
     
-    def pathFind(self, cook_position: Tuple[int, int], target_location: Tuple[int, int]) -> List[Direction]:
-        # // build graph
-        # // make directional connections
-        # // traverse graph
-        [[],[]]
+    # def pathFind(self, cook_position: Tuple[int, int], target_location: Tuple[int, int]) -> List[Direction]:
+    #     # // build graph
+    #     # // make directional connections
+    #     # // traverse graph
+    #     [[],[]]
 
     def scan_board(self, world: GameBoard, station_type: ObjectType, eval_func=None) -> Tuple[int, int]:
         """
