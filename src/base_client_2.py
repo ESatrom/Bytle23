@@ -5,16 +5,26 @@ from game.common.game_board import GameBoard
 from game.common.action import Action
 from game.common.cook import Cook
 from typing import Tuple
+from typing import List
+from enum import Enum
 from game.common.enums import *
 
 # Different states for state machine
 class State:
     WAITING_FOR_DOUGH = 0
-    HAS_DOUGH = 1
-    HAS_ROLLED = 2
+    CARRYING_DOUGH = 1
+    WAITING_FOR_INGREDIENT = 2
 
 # Main client class
 class Client(UserClient):
+    def holding_cooked_pizza(self, cook):
+        return cook.held_item!=None and isinstance(cook.held_item, Pizza) and cook.held_item.state==PizzaState.baked
+    def holding_air(self, cook):
+        return cook.held_item==None or (isinstance(cook.held_item, Topping) and cook.held_item.topping_type==ToppingType.none)
+    def holding_topped_pizza(self, cook):
+        return cook.held_item!=None and isinstance(cook.held_item, Pizza) and cook.held_item.state==PizzaState.sauced and len(cook.held_item.__topping)>0
+    def held_pizza_toppings(self, cook):
+        return cook.held_item.__topping if self.holding_topped_pizza(cook) else []
     def __init__(self):
         """
         Variables and info you want to save between turns go here
@@ -34,7 +44,7 @@ class Client(UserClient):
 
         :returns:       Your team name
         """
-        return 'Base client 2'
+        return 'Papa Rivard\'s Pizza Professional'
 
     def start(self, action: Action, world: GameBoard, cook: Cook):
         """
@@ -45,6 +55,13 @@ class Client(UserClient):
         """
         self.check_side(cook)
 
+    def interact_at(self, cook: Cook, targ_pos: Tuple[int, int]) -> ActionType:
+        man_dist = self.manhattan_distance(cook.position, targ_pos)
+        if man_dist > 1:
+            return self.move_action(cook.position, targ_pos)
+        else:
+            return ActionType.interact
+
     def take_turn(self, turn: int, action: Action, world: GameBoard, cook: Cook):
         """
         This is where your bot will decide what to do.
@@ -53,43 +70,19 @@ class Client(UserClient):
         :param actions:     This is the actions object that you will add effort allocations or decrees to.
         :param world:       Generic world information
         """
-        # Run the start function on turn 1
-        if turn == 1:
-            self.start(action, world, cook)
-        # Check state machine
-        if self.state == State.WAITING_FOR_DOUGH:
-            # Filter by dispensers with a dough object
-            dough_position = self.scan_board(world, ObjectType.dispenser, lambda x: x.item != None and x.item.topping_type == ToppingType.dough)
-            # Move to dough
-            if dough_position != None:
-                man_dist = self.manhattan_distance(cook.position, dough_position)
-                if man_dist > 1:
-                    action.chosen_action = self.move_action(cook.position, dough_position)
-                else:
-                    action.chosen_action = ActionType.interact
-                    self.state = State.HAS_DOUGH
-        elif self.state == State.HAS_DOUGH:
-            # Find a roller station
-            roller_position = self.scan_board(world, ObjectType.roller)
-            # Move to roller
-            if roller_position != None:
-                man_dist = self.manhattan_distance(cook.position, roller_position)
-                if man_dist > 1:
-                    action.chosen_action = self.move_action(cook.position, roller_position)
-                else:
-                    action.chosen_action = ActionType.interact
-                    self.state = State.HAS_ROLLED
-        elif self.state == State.HAS_ROLLED:
-            # Find a garbage bin
-            bin_position = self.scan_board(world, ObjectType.bin)
-            # Move to bin
-            if bin_position != None:
-                man_dist = self.manhattan_distance(cook.position, bin_position)
-                if man_dist > 1:
-                    action.chosen_action = self.move_action(cook.position, bin_position)
-                else:
-                    action.chosen_action = ActionType.interact
-                    self.state = State.WAITING_FOR_DOUGH
+        action.chosen_action=ActionType.Move.none
+        # # Run the start function on turn 1
+        # if turn == 1:
+        #     self.start(action, world, cook)
+        # # Check state machine
+        # if self.holding_air(cook):
+        #     action.chosen_action = self.interact_at(cook, self.most_expensive_dispenser())
+        # else:
+        #     action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.bin))
+
+    def most_expensive_dispenser(self, world: GameBoard):
+        return sorted(self.scan_all(world, ObjectType.dispenser), key=lambda dispenser: world.game_map[dispenser[0]][dispenser[1]].occupied_by.item.worth)[-1]
+
 
     def check_side(self, cook):
         """
@@ -144,6 +137,32 @@ class Client(UserClient):
                         return (y, x)
         # Didn't find anything that matched our criteria
         return None
+
+    def scan_all(self, world: GameBoard, station_type: ObjectType, eval_func=None) -> List[Tuple[int, int]]:
+        """
+        Scans every tile on your clients half of the gameboard for a station that matches station_type and the eval_func
+
+        :param world:               GameBoard to search
+        :param station_type:        ObjectType to filter stations by
+        :param eval_func:           Lambda function to filter by, will be ignored if None
+        :returns Tuple[int, int]:   Will return the y,x position of what you were searching for
+        """
+        hits=[]
+        # For each tile on your side
+        for y in range(self.y_min-1, self.y_max+2):
+            for x in range(self.x_min-1, self.x_max+2):
+                # Filter out things not of object type
+                station = world.game_map[y][x].occupied_by
+                if station != None and station.object_type == station_type:
+                    item = station.item
+                    # If not eval function, return the station
+                    if eval_func == None:
+                        hits+=[(y, x)]
+                    # Check eval function on item
+                    elif eval_func(station):
+                        hits+=[(y, x)]
+        # Didn't find anything that matched our criteria
+        return hits
 
     def manhattan_distance(self, int_tuple_one: Tuple[int, int], int_tuple_two: Tuple[int, int]) -> int:
         """
