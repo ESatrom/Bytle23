@@ -34,7 +34,7 @@ class Client(UserClient):
 
         :returns:       Your team name
         """
-        return 'Blame it on MekE'
+        return 'Papa Rivard\'s Pizza Professional'
 
     def start(self, action: Action, world: GameBoard, cook: Cook):
         """
