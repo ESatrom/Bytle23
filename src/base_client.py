@@ -1,10 +1,9 @@
-from typing import Tuple
 from game.client.user_client import UserClient
 from game.common.cook import Cook
 from game.common.game_board import GameBoard
 from game.common.action import Action
-from game.common.cook import Cook
 from typing import Tuple
+from typing import List
 from game.common.enums import *
 
 # Main client class
@@ -48,28 +47,61 @@ class Client(UserClient):
             return ActionType.interact
 
     def holding_cooked_pizza(self, cook):
-        return True
+        return cook.held_item!=None and cook.held_item.object_type==ObjectType.pizza and cook.held_item.state==PizzaState.baked
+    def holding_air(self, cook):
+        return cook.held_item==None or (cook.held_item.topping_type==ToppingType.none if cook.held_item.object_type==ObjectType.topping else cook.held_item.state==PizzaState.none)
     def holding_topped_pizza(self, cook):
-        return True
-    def holding_cooked_pizza(self, cook):
-        return True
+        return cook.held_item!=None and cook.held_item.object_type==ObjectType.pizza and len(cook.held_item.toppings)>0
     def holding_topping(self, cook, type, cut):
-        return True
+        return cook.held_item!=None and cook.held_item.object_type==ObjectType.topping and cook.held_item.topping_type==type and cook.held_item.is_cut==cut
     def holding_sauced_pizza(self, cook):
-        return True
+        return cook.held_item!=None and cook.held_item.object_type==ObjectType.pizza and cook.held_item.state==PizzaState.sauced and len(cook.held_item.toppings)==0
     def holding_rolled_pizza(self, cook):
-        return True
-    def get_donest_pizza(self, world, cook):
-        return (0,0)
-    def closest_available_oven(self, world, cook):
-        return (0,0)
-    def get_combined_pizza(self, world):
-        return (0,0)
-    def get_combining_pizza(self, world):
-        return (0,0)
-    def get_dispenser(self, world, cook, ingredient):
-        return (0,0)
+        return cook.held_item!=None and cook.held_item.object_type==ObjectType.pizza and cook.held_item.state==PizzaState.rolled
+    def get_donest_pizza(self, world, cook) -> Tuple[int, int]:
+        ovens = self.scan_all(world, ObjectType.oven, lambda oven: oven.is_active)
+        ovens = list(zip(list(map(lambda oven: world.game_map[oven[0]][oven[1]].occupied_by.timer-self.manhattan_distance(cook.position, oven), ovens)), ovens))
+        ovens = sorted(list(filter(lambda oven: oven[0]>0 and oven[0]<=20, ovens)), key=lambda oven: oven[0])
+        if len(ovens)==0:return None
+        return ovens[0][1]
+    def scan_all(self, world: GameBoard, station_type: ObjectType, eval_func=None) -> List[Tuple[int, int]]:
+        """
+        Scans every tile on your clients half of the gameboard for a station that matches station_type and the eval_func
 
+        :param world:               GameBoard to search
+        :param station_type:        ObjectType to filter stations by
+        :param eval_func:           Lambda function to filter by, will be ignored if None
+        :returns Tuple[int, int]:   Will return the y,x position of what you were searching for
+        """
+        hits=[]
+        # For each tile on your side
+        for y in range(self.y_min-1, self.y_max+2):
+            for x in range(self.x_min-1, self.x_max+2):
+                # Filter out things not of object type
+                station = world.game_map[y][x].occupied_by
+                if station != None and station.object_type == station_type:
+                    item = station.item
+                    # If not eval function, return the station
+                    if eval_func == None:
+                        hits+=[(y, x)]
+                    # Check eval function on item
+                    elif eval_func(station):
+                        hits+=[(y, x)]
+        # Didn't find anything that matched our criteria
+        return hits
+    def closest_available_oven(self, world, cook):
+        ovens = self.scan_all(world, ObjectType.oven, lambda oven: (not oven.is_active) and oven.is_powered)
+        if len(ovens)==0:
+            return None
+        return sorted(ovens, key=lambda oven:self.manhattan_distance(cook.position, oven))[0]
+    def get_combined_pizza(self, world):
+        return self.scan_board(world, ObjectType.combiner, lambda combiner: combiner.item!=None and len(combiner.item.toppings)>0)
+    def get_combining_pizza(self, world):
+        return self.scan_board(world, ObjectType.combiner, lambda combiner: combiner.item!=None and len(combiner.item.toppings)<3)
+    def get_dispenser(self, world, cook, ingredient):
+        hits =  self.scan_all(world, ObjectType.dispenser, lambda dispenser: dispenser.item!=None and dispenser.item.topping_type==ingredient)
+        if len(hits)==0:return None
+        return sorted(hits, key=lambda dispenser: self.manhattan_distance(cook.position, dispenser))[0]
     def take_turn(self, turn: int, action: Action, world: GameBoard, cook: Cook):
         """
         This is where your bot will decide what to do.
@@ -84,7 +116,7 @@ class Client(UserClient):
         # Check state machine
         if self.holding_cooked_pizza(cook):
             action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.delivery))
-        elif self.get_donest_pizza(world, cook)!=None and self.holding_air():
+        elif self.get_donest_pizza(world, cook)!=None and self.holding_air(cook):
             action.chosen_action = self.interact_at(cook, self.get_donest_pizza(world, cook))
         elif self.holding_topped_pizza(cook):
             action.chosen_action = self.interact_at(cook, self.closest_available_oven(world, cook))
