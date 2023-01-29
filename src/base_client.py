@@ -53,11 +53,14 @@ class Client(UserClient):
     def holding_topped_pizza(self, cook):
         return cook.held_item!=None and cook.held_item.object_type==ObjectType.pizza and len(cook.held_item.toppings)>0
     def holding_topping(self, cook, type, cut):
-        return cook.held_item!=None and cook.held_item.object_type==ObjectType.topping and cook.held_item.topping_type==type and cook.held_item.is_cut==cut
+        return cook.held_item!=None and cook.held_item.object_type==ObjectType.topping and (cook.held_item.topping_type==type or (type==None and cook.held_item.topping_type!=ToppingType.dough)) and cook.held_item.is_cut==cut
     def holding_sauced_pizza(self, cook):
         return cook.held_item!=None and cook.held_item.object_type==ObjectType.pizza and cook.held_item.state==PizzaState.sauced and len(cook.held_item.toppings)==0
     def holding_rolled_pizza(self, cook):
         return cook.held_item!=None and cook.held_item.object_type==ObjectType.pizza and cook.held_item.state==PizzaState.rolled
+    def most_expensive_dispenser(self, world: GameBoard):
+        things=self.scan_all(world, ObjectType.dispenser)
+        return sorted(things, key=lambda dispenser: (1 if world.game_map[dispenser[0]][dispenser[1]].occupied_by.item.worth == 60 else (0 if world.game_map[dispenser[0]][dispenser[1]].occupied_by.item.worth==50 else world.game_map[dispenser[0]][dispenser[1]].occupied_by.item.worth)) if world.game_map[dispenser[0]][dispenser[1]].occupied_by.item!=None else 0)[-1]
     def get_donest_pizza(self, world, cook) -> Tuple[int, int]:
         ovens = self.scan_all(world, ObjectType.oven, lambda oven: oven.is_active)
         ovens = list(zip(list(map(lambda oven: world.game_map[oven[0]][oven[1]].occupied_by.timer-self.manhattan_distance(cook.position, oven), ovens)), ovens))
@@ -122,11 +125,15 @@ class Client(UserClient):
             action.chosen_action = self.interact_at(cook, self.get_donest_pizza(world, cook))
         elif self.holding_topped_pizza(cook):
             action.chosen_action = self.interact_at(cook, self.closest_available_oven(world, cook))
-        elif self.get_combined_pizza(world)!=None:
+        elif self.get_combined_pizza(world)!=None and self.holding_air(cook):
+            com_pos=self.scan_board(world, ObjectType.combiner)
+            if len(world.game_map[com_pos[0]][com_pos[1]].occupied_by.item.toppings)==1:
+                action.chosen_action = self.interact_at(cook, self.most_expensive_dispenser(world))
+            else:
+                action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.combiner))
+        elif self.holding_topping(cook, None, True):
             action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.combiner))
-        elif self.holding_topping(cook, ToppingType.cheese, True):
-            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.combiner))
-        elif self.holding_topping(cook, ToppingType.cheese, False):
+        elif self.holding_topping(cook, None, False):
             action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.cutter))
         elif self.get_combining_pizza(world)!=None and self.get_dispenser(world, cook, ToppingType.cheese):
             action.chosen_action = self.interact_at(cook, self.get_dispenser(world, cook, ToppingType.cheese))
