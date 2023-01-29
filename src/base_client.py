@@ -12,10 +12,13 @@ class Client(UserClient):
         """
         Variables and info you want to save between turns go here
         """
+        
+
         super().__init__()
         # What side and x and y bounds are we using (set in start)
         self.is_left_side = None
         self.logged_move = None
+
         self.x_min = None
         self.y_min = 1
         self.x_max = None
@@ -122,7 +125,7 @@ class Client(UserClient):
         # Check state machine
         ded=False
         if self.logged_move!=None and self.try_move(world, cook)!=None:
-            action.chosen_action = self.logged_move
+            action.chosen_action = self.try_move(world, cook)
             self.logged_move=None
         elif self.holding_cooked_pizza(cook):
             action.chosen_action = self.interact_at(world, cook, self.scan_board(world, ObjectType.delivery))
@@ -307,11 +310,11 @@ class Client(UserClient):
                 if tuple_diff[0] > 0:
                     for y in range(0,pos[0]):
                         if (not world.game_map[y][pos[1]].is_wet_tile) and (not world.game_map[y][pos[1]-1].is_wet_tile):
-                            self.logged_move=ActionType.Move.left
+                            self.logged_move=(ActionType.Move.left, ActionType.Move.up)
                             return ActionType.Move.up
                 for y in range(pos[0],len(world.game_map)):
                     if (not world.game_map[y][pos[1]].is_wet_tile) and (not world.game_map[y][pos[1]-1].is_wet_tile):
-                        self.logged_move=ActionType.Move.left
+                        self.logged_move=(ActionType.Move.left, ActionType.Move.down)
                         return ActionType.Move.down
             else:
                 return ActionType.Move.left
@@ -320,11 +323,11 @@ class Client(UserClient):
                 if tuple_diff[0] > 0:
                     for y in range(0,pos[0]):
                         if (not world.game_map[y][pos[1]].is_wet_tile) and (not world.game_map[y][pos[1]+1].is_wet_tile):
-                            self.logged_move=ActionType.Move.right
+                            self.logged_move=(ActionType.Move.right, ActionType.Move.up)
                             return ActionType.Move.up
                 for y in range(pos[0],len(world.game_map)):
                     if (not world.game_map[y][pos[1]].is_wet_tile) and (not world.game_map[y][pos[1]+1].is_wet_tile):
-                        self.logged_move=ActionType.Move.right
+                        self.logged_move=(ActionType.Move.right, ActionType.Move.down)
                         return ActionType.Move.down
             else:
                 return ActionType.Move.right
@@ -333,11 +336,11 @@ class Client(UserClient):
                 if tuple_diff[1] > 0:
                     for x in range(0,pos[1]):
                         if (not world.game_map[pos[0]][x].is_wet_tile) and (not world.game_map[pos[0]-1][x].is_wet_tile):
-                            self.logged_move=ActionType.Move.up
+                            self.logged_move=(ActionType.Move.up, ActionType.Move.left)
                             return ActionType.Move.left
                 for x in range(pos[1],len(world.game_map[0])):
                     if (not world.game_map[pos[0]][x].is_wet_tile) and (not world.game_map[pos[0]-1][x].is_wet_tile):
-                        self.logged_move=ActionType.Move.up
+                        self.logged_move=(ActionType.Move.up, ActionType.Move.right)
                         return ActionType.Move.right
             else:
                 return ActionType.Move.up
@@ -346,11 +349,11 @@ class Client(UserClient):
                 if tuple_diff[1] > 0:
                     for x in range(0,pos[1]):
                         if (not world.game_map[pos[0]][x].is_wet_tile) and (not world.game_map[pos[0]+1][x].is_wet_tile):
-                            self.logged_move=ActionType.Move.down
+                            self.logged_move=(ActionType.Move.down, ActionType.Move.left)
                             return ActionType.Move.left
                 for x in range(pos[1],len(world.game_map[0])):
                     if (not world.game_map[pos[0]][x].is_wet_tile) and (not world.game_map[pos[0]+1][x].is_wet_tile):
-                        self.logged_move=ActionType.Move.down
+                        self.logged_move=(ActionType.Move.down, ActionType.Move.right)
                         return ActionType.Move.right
             else:
                 return ActionType.Move.down
