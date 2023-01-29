@@ -135,7 +135,7 @@ class Client(UserClient):
             temp=action.chosen_action
             action.chosen_action = self.interact_at(world, cook, self.closest_available_oven(world, cook))
             if action.chosen_action==temp:ded=True
-        elif self.pizza_in_storage(world, cook)!=None and self.holding_air(cook):
+        elif self.pizza_in_storage(world, cook)!=None and self.holding_air(cook) and self.closest_available_oven(world, cook)!=None:
             action.chosen_action = self.interact_at(world, cook, self.pizza_in_storage(world, cook))
         elif self.get_combined_pizza(world)!=None and self.holding_air(cook):
             com_pos=self.scan_board(world, ObjectType.combiner)
