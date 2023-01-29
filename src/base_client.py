@@ -15,6 +15,7 @@ class Client(UserClient):
         super().__init__()
         # What side and x and y bounds are we using (set in start)
         self.is_left_side = None
+        self.logged_move = None
         self.x_min = None
         self.y_min = 1
         self.x_max = None
@@ -37,12 +38,12 @@ class Client(UserClient):
         """
         self.check_side(cook)
 
-    def interact_at(self, cook: Cook, targ_pos: Tuple[int, int]) -> ActionType:
+    def interact_at(self, world, cook: Cook, targ_pos: Tuple[int, int]) -> ActionType:
         if targ_pos==None:
             return ActionType.none
         man_dist = self.manhattan_distance(cook.position, targ_pos)
         if man_dist > 1:
-            return self.move_action(cook.position, targ_pos)
+            return self.move_action(world, cook.position, targ_pos)
         else:
             return ActionType.interact
 
@@ -119,34 +120,37 @@ class Client(UserClient):
         if turn == 1:
             self.start(action, world, cook)
         # Check state machine
-        if self.holding_cooked_pizza(cook):
-            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.delivery))
+        if self.logged_move!=None and self.try_move(world, cook)!=None:
+            action.chosen_action = self.logged_move
+            self.logged_move=None
+        elif self.holding_cooked_pizza(cook):
+            action.chosen_action = self.interact_at(world, cook, self.scan_board(world, ObjectType.delivery))
         elif self.get_donest_pizza(world, cook)!=None and self.holding_air(cook):
-            action.chosen_action = self.interact_at(cook, self.get_donest_pizza(world, cook))
+            action.chosen_action = self.interact_at(world, cook, self.get_donest_pizza(world, cook))
         elif self.holding_topped_pizza(cook):
-            action.chosen_action = self.interact_at(cook, self.closest_available_oven(world, cook))
-        elif self.get_combined_pizza(world)!=None and not self.holding_air(cook):
-            com_pos=self.scan_board(world, ObjectType.combiner)
-            if len(world.game_map[com_pos[0]][com_pos[1]].occupied_by.item.toppings)==1 and turn<450:
-                action.chosen_action = self.interact_at(cook, self.most_expensive_dispenser(world))
-            else:
-                action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.combiner))
+            action.chosen_action = self.interact_at(world, cook, self.closest_available_oven(world, cook))
+        elif self.get_combined_pizza(world)!=None and self.holding_air(cook):
+            # com_pos=self.scan_board(world, ObjectType.combiner)
+            # if len(world.game_map[com_pos[0]][com_pos[1]].occupied_by.item.toppings)==1 and turn<450:
+            #     action.chosen_action = self.interact_at(world, cook, self.most_expensive_dispenser(world))
+            # else:
+                action.chosen_action = self.interact_at(world, cook, self.scan_board(world, ObjectType.combiner))
         elif self.holding_topping(cook, None, True):
-            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.combiner))
+            action.chosen_action = self.interact_at(world, cook, self.scan_board(world, ObjectType.combiner))
         elif self.holding_topping(cook, None, False):
-            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.cutter))
+            action.chosen_action = self.interact_at(world, cook, self.scan_board(world, ObjectType.cutter))
         elif self.get_combining_pizza(world)!=None and self.get_dispenser(world, cook, ToppingType.cheese):
-            action.chosen_action = self.interact_at(cook, self.get_dispenser(world, cook, ToppingType.cheese))
+            action.chosen_action = self.interact_at(world, cook, self.get_dispenser(world, cook, ToppingType.cheese))
         elif self.holding_sauced_pizza(cook):
-            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.combiner))
+            action.chosen_action = self.interact_at(world, cook, self.scan_board(world, ObjectType.combiner))
         elif self.holding_rolled_pizza(cook):
-            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.sauce))
+            action.chosen_action = self.interact_at(world, cook, self.scan_board(world, ObjectType.sauce))
         elif self.holding_topping(cook, ToppingType.dough, False):
-            action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.roller))
+            action.chosen_action = self.interact_at(world, cook, self.scan_board(world, ObjectType.roller))
         elif self.get_dispenser(world, cook, ToppingType.dough)!=None and self.is_combiner_available(world):
-            action.chosen_action = self.interact_at(cook, self.get_dispenser(world, cook, ToppingType.dough))
+            action.chosen_action = self.interact_at(world, cook, self.get_dispenser(world, cook, ToppingType.dough))
         else:
-            action.chosen_action = self.move_action(cook.position, self.scan_board(world, ObjectType.delivery))
+            action.chosen_action = self.move_action(world, cook.position, self.scan_board(world, ObjectType.delivery))
 
     def check_side(self, cook):
         """
@@ -165,7 +169,7 @@ class Client(UserClient):
             self.x_min = 7
             self.x_max = 11
 
-    def move_action(self, cook_position: Tuple[int, int], target_location: Tuple[int, int]) -> ActionType.Move:
+    def move_action(self, world, cook_position: Tuple[int, int], target_location: Tuple[int, int]) -> ActionType.Move:
         """
         Determines which direction to move, and returns that ActionType
 
@@ -174,7 +178,7 @@ class Client(UserClient):
         :returns ActionType.Move:   Will return the correct action type to move towards the bounded target position
         """
         dist_tup = self.move_difference(cook_position, target_location)
-        direction_to_move = self.decide_move(dist_tup)
+        direction_to_move = self.decide_move(world, cook_position, dist_tup)
         return direction_to_move
 
     # class node:
@@ -245,17 +249,85 @@ class Client(UserClient):
         x_diff = int_tuple_one[1] - x
         return (y_diff, x_diff)
 
-    def decide_move(self, tuple_diff: Tuple[int, int]) -> ActionType.Move:
+    def try_move(self, world, cook):
+        if self.logged_move==ActionType.Move.up:
+            if world.game_map[cook.position[0]-1][cook.position[1]].is_wet_tile:
+                return None
+            else:
+                return ActionType.Move.up
+        if self.logged_move==ActionType.Move.down:
+            if world.game_map[cook.position[0]+1][cook.position[1]].is_wet_tile:
+                return None
+            else:
+                return ActionType.Move.down
+        if self.logged_move==ActionType.Move.left:
+            if world.game_map[cook.position[0]][cook.position[1]-1].is_wet_tile:
+                return None
+            else:
+                return ActionType.Move.left
+        if self.logged_move==ActionType.Move.right:
+            if world.game_map[cook.position[0]][cook.position[1]+1].is_wet_tile:
+                return None
+            else:
+                return ActionType.Move.right
+
+
+    def decide_move(self, world, pos, tuple_diff: Tuple[int, int]) -> ActionType.Move:
         """
         Decides which direction to move in, based on a tuple difference
 
         :returns ActionType.Move:   Will return the correct action type to move towards the tuple difference
         """
         if tuple_diff[1] > 0:
-            return ActionType.Move.left
+            if world.game_map[pos[0]][pos[1]-1].is_wet_tile:
+                if tuple_diff[0] > 0:
+                    for y in range(0,pos[0]):
+                        if (not world.game_map[y][pos[1]].is_wet_tile) and (not world.game_map[y][pos[1]-1].is_wet_tile):
+                            self.logged_move=ActionType.Move.left
+                            return ActionType.Move.up
+                for y in range(pos[0],len(world.game_map)):
+                    if (not world.game_map[y][pos[1]].is_wet_tile) and (not world.game_map[y][pos[1]-1].is_wet_tile):
+                        self.logged_move=ActionType.Move.left
+                        return ActionType.Move.down
+            else:
+                return ActionType.Move.left
         elif tuple_diff[1] < 0:
-            return ActionType.Move.right
+            if world.game_map[pos[0]][pos[1]+1].is_wet_tile:
+                if tuple_diff[0] > 0:
+                    for y in range(0,pos[0]):
+                        if (not world.game_map[y][pos[1]].is_wet_tile) and (not world.game_map[y][pos[1]+1].is_wet_tile):
+                            self.logged_move=ActionType.Move.right
+                            return ActionType.Move.up
+                for y in range(pos[0],len(world.game_map)):
+                    if (not world.game_map[y][pos[1]].is_wet_tile) and (not world.game_map[y][pos[1]+1].is_wet_tile):
+                        self.logged_move=ActionType.Move.right
+                        return ActionType.Move.down
+            else:
+                return ActionType.Move.right
         elif tuple_diff[0] > 0:
-            return ActionType.Move.up
+            if world.game_map[pos[0]-1][pos[1]].is_wet_tile:
+                if tuple_diff[1] > 0:
+                    for x in range(0,pos[1]):
+                        if (not world.game_map[pos[0]][x].is_wet_tile) and (not world.game_map[pos[0]-1][x].is_wet_tile):
+                            self.logged_move=ActionType.Move.up
+                            return ActionType.Move.left
+                for x in range(pos[1],len(world.game_map[0])):
+                    if (not world.game_map[pos[0]][x].is_wet_tile) and (not world.game_map[pos[0]-1][x].is_wet_tile):
+                        self.logged_move=ActionType.Move.up
+                        return ActionType.Move.right
+            else:
+                return ActionType.Move.up
         elif tuple_diff[0] < 0:
-            return ActionType.Move.down
+            if world.game_map[pos[0]+1][pos[1]].is_wet_tile:
+                if tuple_diff[1] > 0:
+                    for x in range(0,pos[1]):
+                        if (not world.game_map[pos[0]][x].is_wet_tile) and (not world.game_map[pos[0]+1][x].is_wet_tile):
+                            self.logged_move=ActionType.Move.down
+                            return ActionType.Move.left
+                for x in range(pos[1],len(world.game_map[0])):
+                    if (not world.game_map[pos[0]][x].is_wet_tile) and (not world.game_map[pos[0]+1][x].is_wet_tile):
+                        self.logged_move=ActionType.Move.down
+                        return ActionType.Move.right
+            else:
+                return ActionType.Move.down
+        return ActionType.Move.none
