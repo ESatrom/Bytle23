@@ -120,6 +120,7 @@ class Client(UserClient):
         if turn == 1:
             self.start(action, world, cook)
         # Check state machine
+        ded=False
         if self.logged_move!=None and self.try_move(world, cook)!=None:
             action.chosen_action = self.logged_move
             self.logged_move=None
@@ -128,7 +129,11 @@ class Client(UserClient):
         elif self.get_donest_pizza(world, cook)!=None and self.holding_air(cook):
             action.chosen_action = self.interact_at(world, cook, self.get_donest_pizza(world, cook))
         elif self.holding_topped_pizza(cook):
+            temp=action.chosen_action
             action.chosen_action = self.interact_at(world, cook, self.closest_available_oven(world, cook))
+            if action.chosen_action==temp:ded=True
+        elif self.pizza_in_storage(world, cook)!=None and self.holding_air(cook):
+            action.chosen_action = self.interact_at(world, cook, self.pizza_in_storage(world, cook))
         elif self.get_combined_pizza(world)!=None and self.holding_air(cook):
             com_pos=self.scan_board(world, ObjectType.combiner)
             if len(world.game_map[com_pos[0]][com_pos[1]].occupied_by.item.toppings)==1 and turn<450:
@@ -151,6 +156,25 @@ class Client(UserClient):
             action.chosen_action = self.interact_at(world, cook, self.get_dispenser(world, cook, ToppingType.dough))
         else:
             action.chosen_action = self.move_action(world, cook.position, self.scan_board(world, ObjectType.delivery))
+            ded=True
+        
+        
+        
+        if ded:
+            if self.holding_topped_pizza(cook):
+                action.chosen_action = self.interact_at(world, cook, self.get_available_storage(world, cook))
+            else:
+                pass
+
+    
+    def pizza_in_storage(self, world, cook):
+        pizzas=self.scan_all(world, ObjectType.storage, lambda storage: storage.item!=None and storage.item.object_type==ObjectType.pizza)
+        if len(pizzas)==0:return None
+        return sorted(pizzas, key=lambda pizza: world.game_map[pizza[0]][pizza[1]].occupied_by.item.worth)[-1]
+    def get_available_storage(self, world, cook):
+        boxes=self.scan_all(world, ObjectType.storage, lambda storage: storage.item==None or (storage.item.object_type==ObjectType.topping and storage.item.topping_type==ToppingType.none))
+        if len(boxes)==0:return None
+        return sorted(boxes, key=lambda box: self.manhattan_distance(box, cook.position))[0]
 
     def check_side(self, cook):
         """
