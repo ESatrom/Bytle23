@@ -315,7 +315,7 @@ class Client(UserClient):
                 return ActionType.Move.up
             elif tuple_diff[0] < 0:
                 return ActionType.Move.down
-        elif tuple_diff[1] > 0 and self.previousPosition!=(cook.position[0],cook.position[1]-1):
+        elif tuple_diff[1] > 0 and self.previousPosition!=(pos[0],pos[1]-1):
             if world.game_map[pos[0]][pos[1]-1].is_wet_tile:
                 if tuple_diff[0] > 0:
                     for y in range(0,pos[0]):
@@ -328,7 +328,7 @@ class Client(UserClient):
                         return ActionType.Move.down
             else:
                 return ActionType.Move.left
-        elif tuple_diff[1] < 0 and self.previousPosition!=(cook.position[0],cook.position[1]+1):
+        elif tuple_diff[1] < 0 and self.previousPosition!=(pos[0],pos[1]+1):
             if world.game_map[pos[0]][pos[1]+1].is_wet_tile:
                 if tuple_diff[0] > 0:
                     for y in range(0,pos[0]):
