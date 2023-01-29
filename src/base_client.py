@@ -125,9 +125,9 @@ class Client(UserClient):
             action.chosen_action = self.interact_at(cook, self.get_donest_pizza(world, cook))
         elif self.holding_topped_pizza(cook):
             action.chosen_action = self.interact_at(cook, self.closest_available_oven(world, cook))
-        elif self.get_combined_pizza(world)!=None and self.holding_air(cook):
+        elif self.get_combined_pizza(world)!=None and not self.holding_air(cook):
             com_pos=self.scan_board(world, ObjectType.combiner)
-            if len(world.game_map[com_pos[0]][com_pos[1]].occupied_by.item.toppings)==1:
+            if len(world.game_map[com_pos[0]][com_pos[1]].occupied_by.item.toppings)==1 and turn<450:
                 action.chosen_action = self.interact_at(cook, self.most_expensive_dispenser(world))
             else:
                 action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.combiner))
