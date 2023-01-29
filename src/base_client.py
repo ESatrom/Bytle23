@@ -98,6 +98,8 @@ class Client(UserClient):
         return self.scan_board(world, ObjectType.combiner, lambda combiner: combiner.item!=None and len(combiner.item.toppings)>0)
     def get_combining_pizza(self, world):
         return self.scan_board(world, ObjectType.combiner, lambda combiner: combiner.item!=None and len(combiner.item.toppings)<3)
+    def is_combiner_available(self, world):
+        return self.scan_board(world, ObjectType.combiner, lambda combiner: combiner.item==None or combiner.item.state==PizzaState.none)
     def get_dispenser(self, world, cook, ingredient):
         hits =  self.scan_all(world, ObjectType.dispenser, lambda dispenser: dispenser.item!=None and dispenser.item.topping_type==ingredient)
         if len(hits)==0:return None
@@ -134,7 +136,7 @@ class Client(UserClient):
             action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.sauce))
         elif self.holding_topping(cook, ToppingType.dough, False):
             action.chosen_action = self.interact_at(cook, self.scan_board(world, ObjectType.roller))
-        elif self.get_dispenser(world, cook, ToppingType.dough)!=None:
+        elif self.get_dispenser(world, cook, ToppingType.dough)!=None and self.is_combiner_available(world):
             action.chosen_action = self.interact_at(cook, self.get_dispenser(world, cook, ToppingType.dough))
         else:
             action.chosen_action = self.move_action(cook.position, self.scan_board(world, ObjectType.delivery))
