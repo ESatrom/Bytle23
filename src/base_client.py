@@ -124,7 +124,6 @@ class Client(UserClient):
             self.start(action, world, cook)
         # Check state machine
         ded=False
-        self.previousPosition = cook.position
         if self.logged_move!=None and self.try_move(world, cook)!=None:
             action.chosen_action = self.try_move(world, cook)
             self.logged_move=None
@@ -169,6 +168,7 @@ class Client(UserClient):
                 action.chosen_action = self.interact_at(world, cook, self.get_available_storage(world, cook))
             else:
                 pass
+        self.previousPosition=cook.position
 
     
     def pizza_in_storage(self, world, cook):
