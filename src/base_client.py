@@ -12,7 +12,7 @@ class Client(UserClient):
         """
         Variables and info you want to save between turns go here
         """
-        
+        self.previousPosition = None
 
         super().__init__()
         # What side and x and y bounds are we using (set in start)
@@ -31,7 +31,7 @@ class Client(UserClient):
         :returns:       Your team name
         """
         return ('Papa Rivard\'s Pizza Professional™', 'john')
-
+    
     def start(self, action: Action, world: GameBoard, cook: Cook):
         """
         Run on the first turn by the take_turn() function
@@ -124,6 +124,7 @@ class Client(UserClient):
             self.start(action, world, cook)
         # Check state machine
         ded=False
+        self.previousPosition = cook.position
         if self.logged_move!=None and self.try_move(world, cook)!=None:
             action.chosen_action = self.try_move(world, cook)
             self.logged_move=None
@@ -305,7 +306,16 @@ class Client(UserClient):
 
         :returns ActionType.Move:   Will return the correct action type to move towards the tuple difference
         """
-        if tuple_diff[1] > 0:
+        if world.event_active!=EventType.wet_tile:
+            if tuple_diff[1] > 0:
+                return ActionType.Move.left
+            elif tuple_diff[1] < 0:
+                return ActionType.Move.right
+            elif tuple_diff[0] > 0:
+                return ActionType.Move.up
+            elif tuple_diff[0] < 0:
+                return ActionType.Move.down
+        elif tuple_diff[1] > 0 and self.previousPosition!=(cook.position[0],cook.position[1]-1):
             if world.game_map[pos[0]][pos[1]-1].is_wet_tile:
                 if tuple_diff[0] > 0:
                     for y in range(0,pos[0]):
@@ -318,7 +328,7 @@ class Client(UserClient):
                         return ActionType.Move.down
             else:
                 return ActionType.Move.left
-        elif tuple_diff[1] < 0:
+        elif tuple_diff[1] < 0 and self.previousPosition!=(cook.position[0],cook.position[1]+1):
             if world.game_map[pos[0]][pos[1]+1].is_wet_tile:
                 if tuple_diff[0] > 0:
                     for y in range(0,pos[0]):
